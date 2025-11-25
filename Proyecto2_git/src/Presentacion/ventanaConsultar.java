@@ -6,22 +6,120 @@ package Presentacion;
 
 import java.awt.Dimension;
 import java.awt.Toolkit;
+import Conceptos.*;
+import Util.GestorDatos;
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 
 /**
  *
  * @author Matias
  */
 public class ventanaConsultar extends javax.swing.JDialog {
+    private GestorDatos gestor;
+    private DefaultTableModel modeloTabla;
 
     /**
      * Creates new form VentanaSolicitar
      */
     public ventanaConsultar(java.awt.Frame parent, boolean modal) {
         super(parent, modal);
-        initComponents();
+        initComponents();        
+        gestor = GestorDatos.getInstancia();
+        
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
         this.setSize(screenSize);
+        
+        configurarTabla();
+        cargarComboEstado();
+        buscarSolicitudes();
     }
+    
+    private void buscarSolicitudes(){
+        //Limpiar Tabla
+        modeloTabla.setRowCount(0);
+        
+        //Obtener Filtros
+        String filtroPlaca = jTextFieldPlaca.getText().trim().toLowerCase();
+        String filtroEstado = "";
+        
+        if (jComboBoxEstado.getSelectedIndex() > 0) {
+        String seleccion = (String) jComboBoxEstado.getSelectedItem();
+        filtroEstado = seleccion.split(" - ")[0].trim(); // Extraer ID del estado
+        }
+        
+        // Buscar solicitudes que cumplan TODOS los filtros 
+        for (Solicitud solicitud : gestor.getSolicitudes()) {
+            // Obtener datos relacionados
+            Cliente cliente = gestor.buscarClientePorId(solicitud.getIdCliente());
+            Servicio servicio = gestor.buscarServicioPorId(solicitud.getIdServicio());
+            Estado estado = gestor.buscarEstadoPorId(solicitud.getIdEstado());
+            // Si algún dato relacionado no existe, saltar
+            if (cliente == null || servicio == null || estado == null) {
+                continue;
+            }
+            
+            // APLICAR FILTROS (AND)
+            boolean cumpleFiltros = true;
+            // Filtro por placa
+            if (!filtroPlaca.isEmpty()) {
+                if (!solicitud.getPlaca().toLowerCase().contains(filtroPlaca)) {
+                    cumpleFiltros = false;
+                }
+            }
+            // Filtro por estado
+            if (!filtroEstado.isEmpty()) {
+                if (!solicitud.getIdEstado().equals(filtroEstado)) {
+                    cumpleFiltros = false;
+                }
+            }
+            // Si cumple todos los filtros, agregar a la tabla
+            if (cumpleFiltros) {
+                Object[] fila = {
+                        solicitud.getPlaca(),
+                        cliente.getNombre(),
+                        servicio.getNombre(),
+                        estado.getNombre()
+                };
+                modeloTabla.addRow(fila);
+            }
+        }
+    }
+    
+    /*
+     * Configura el modelo de la tabla con las columnas necesarias
+     */
+    private void configurarTabla() {
+        // Definir columnas: Placa, Nombre (Cliente), Servicio, Estado
+        String[] columnas = { "Placa", "Nombre", "Servicio", "Estado" };
+        modeloTabla = new DefaultTableModel(columnas, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false; // Tabla no editable
+            }
+        };
+        jTable.setModel(modeloTabla);
+        jTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        
+         // Ajustar ancho de columnas
+        jTable.getColumnModel().getColumn(0).setPreferredWidth(100); // Placa
+        jTable.getColumnModel().getColumn(1).setPreferredWidth(200); // Nombre (Cliente)
+        jTable.getColumnModel().getColumn(2).setPreferredWidth(200); // Servicio
+        jTable.getColumnModel().getColumn(3).setPreferredWidth(150); // Estado
+    }
+    
+    /*
+     * Carga los estados en el ComboBox
+     */
+    private void cargarComboEstado() {
+        jComboBoxEstado.removeAllItems();
+        jComboBoxEstado.addItem("-- Todos --");
+        for (Estado estado : gestor.getEstados()) {
+            jComboBoxEstado.addItem(estado.getId() + " - " + estado.getNombre());
+        }
+    }
+    
+    
 
     /**
      * This method is called from within the constructor to initialize the form.
@@ -45,8 +143,9 @@ public class ventanaConsultar extends javax.swing.JDialog {
         jButtonBuscar = new javax.swing.JButton();
         jSeparator1 = new javax.swing.JSeparator();
         jScrollPane1 = new javax.swing.JScrollPane();
-        jTabla = new javax.swing.JTable();
+        jTable = new javax.swing.JTable();
         jButtonSalir = new javax.swing.JButton();
+        jButtonLimpiar = new javax.swing.JButton();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
         setTitle(" Consultar Solicitudes de Servicio");
@@ -94,7 +193,7 @@ public class ventanaConsultar extends javax.swing.JDialog {
             }
         });
 
-        jTabla.setModel(new javax.swing.table.DefaultTableModel(
+        jTable.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
                 {null, null, null, null},
                 {null, null, null, null},
@@ -105,12 +204,19 @@ public class ventanaConsultar extends javax.swing.JDialog {
                 "Title 1", "Title 2", "Title 3", "Title 4"
             }
         ));
-        jScrollPane1.setViewportView(jTabla);
+        jScrollPane1.setViewportView(jTable);
 
         jButtonSalir.setText("Salir");
         jButtonSalir.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jButtonSalirActionPerformed(evt);
+            }
+        });
+
+        jButtonLimpiar.setText("Limpiar");
+        jButtonLimpiar.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButtonLimpiarActionPerformed(evt);
             }
         });
 
@@ -145,7 +251,9 @@ public class ventanaConsultar extends javax.swing.JDialog {
                         .addGap(269, 269, 269)
                         .addComponent(jLabel5, javax.swing.GroupLayout.PREFERRED_SIZE, 60, javax.swing.GroupLayout.PREFERRED_SIZE)))
                 .addGap(18, 18, 18)
-                .addComponent(jButtonBuscar, javax.swing.GroupLayout.PREFERRED_SIZE, 100, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                    .addComponent(jButtonBuscar, javax.swing.GroupLayout.DEFAULT_SIZE, 100, Short.MAX_VALUE)
+                    .addComponent(jButtonLimpiar, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                 .addContainerGap(38, Short.MAX_VALUE))
             .addGroup(layout.createSequentialGroup()
                 .addContainerGap()
@@ -159,9 +267,9 @@ public class ventanaConsultar extends javax.swing.JDialog {
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                .addGap(32, 32, 32)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
                     .addGroup(layout.createSequentialGroup()
-                        .addGap(32, 32, 32)
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                             .addComponent(jLabel1)
                             .addComponent(jLabel5))
@@ -177,11 +285,13 @@ public class ventanaConsultar extends javax.swing.JDialog {
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                             .addComponent(jLabel3)
-                            .addComponent(jTextFieldEmail, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                            .addComponent(jTextFieldEmail, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGap(54, 54, 54))
                     .addGroup(layout.createSequentialGroup()
-                        .addGap(47, 47, 47)
-                        .addComponent(jButtonBuscar, javax.swing.GroupLayout.PREFERRED_SIZE, 100, javax.swing.GroupLayout.PREFERRED_SIZE)))
-                .addGap(17, 17, 17)
+                        .addComponent(jButtonBuscar, javax.swing.GroupLayout.PREFERRED_SIZE, 50, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(jButtonLimpiar, javax.swing.GroupLayout.PREFERRED_SIZE, 50, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)))
                 .addComponent(jSeparator1, javax.swing.GroupLayout.PREFERRED_SIZE, 10, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 200, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -210,12 +320,18 @@ public class ventanaConsultar extends javax.swing.JDialog {
     }//GEN-LAST:event_jComboBoxEstadoActionPerformed
 
     private void jButtonBuscarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButtonBuscarActionPerformed
-        // TODO add your handling code here:
+        buscarSolicitudes();
     }//GEN-LAST:event_jButtonBuscarActionPerformed
 
     private void jButtonSalirActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButtonSalirActionPerformed
         dispose();
     }//GEN-LAST:event_jButtonSalirActionPerformed
+
+    private void jButtonLimpiarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButtonLimpiarActionPerformed
+        jTextFieldPlaca.setText("");
+        jComboBoxEstado.setSelectedIndex(0);
+        buscarSolicitudes(); // Mostrar todas
+    }//GEN-LAST:event_jButtonLimpiarActionPerformed
 
     /**
      * @param args the command line arguments
@@ -246,6 +362,10 @@ public class ventanaConsultar extends javax.swing.JDialog {
         //</editor-fold>
         //</editor-fold>
         //</editor-fold>
+        //</editor-fold>
+        //</editor-fold>
+        //</editor-fold>
+        //</editor-fold>
 
         /* Create and display the dialog */
         java.awt.EventQueue.invokeLater(new Runnable() {
@@ -264,6 +384,7 @@ public class ventanaConsultar extends javax.swing.JDialog {
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton jButtonBuscar;
+    private javax.swing.JButton jButtonLimpiar;
     private javax.swing.JButton jButtonSalir;
     private javax.swing.JComboBox<String> jComboBoxEstado;
     private javax.swing.JLabel jLabel1;
@@ -274,7 +395,7 @@ public class ventanaConsultar extends javax.swing.JDialog {
     private javax.swing.JLabel jLabel6;
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JSeparator jSeparator1;
-    private javax.swing.JTable jTabla;
+    private javax.swing.JTable jTable;
     private javax.swing.JTextField jTextFieldEmail;
     private javax.swing.JTextField jTextFieldPlaca;
     private javax.swing.JTextField jTextFieldTel;
